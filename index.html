@@ -167,6 +167,14 @@
       background: var(--danger-bg); color: var(--danger-text);
       padding: 1px 6px; border-radius: 99px;
     }
+    .friend-del-btn {
+      display: none; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: var(--radius-sm, 6px);
+      border: none; background: transparent; color: var(--text-muted);
+      cursor: pointer; flex-shrink: 0; font-size: 13px;
+    }
+    .friend-item:hover .friend-del-btn { display: flex; }
+    .friend-del-btn:hover { background: var(--danger-bg); color: var(--danger-text); }
     .sidebar-divider { height: 1px; background: var(--border-light); margin: 4px 8px 8px; }
 
     /* ── Main ── */
@@ -570,8 +578,8 @@
 // KONFIGURASI SUPABASE — isi dua baris ini dengan milik project Anda
 // Caranya: Supabase Dashboard → Project Settings → API
 // ════════════════════════════════════════════════════════════════════
-const SUPABASE_URL      = 'https://pjzkugxumzqhynbyhide.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqemt1Z3h1bXpxaHluYnloaWRlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3MTc1MzcsImV4cCI6MjA5NzI5MzUzN30.A24koLAV1K45Q4xHAj2EWaZmV_ab6AWZS7bL1SLhkGA';
+const SUPABASE_URL      = 'https://YOUR-PROJECT-REF.supabase.co';
+const SUPABASE_ANON_KEY = 'YOUR-ANON-PUBLIC-KEY';
 
 const COLORS = ['blue','teal','coral','purple','amber','pink','green'];
 const COLOR_STYLES = {
@@ -695,7 +703,8 @@ function renderSidebar() {
       div.innerHTML = `
         <div class="avatar" style="background:${cs.bg};color:${cs.color}">${initials(f.name)}</div>
         <span class="friend-name">${escapeHtml(f.name)}</span>
-        ${unpaid ? `<span class="badge-count">${unpaid}</span>` : ''}`;
+        ${unpaid ? `<span class="badge-count">${unpaid}</span>` : ''}
+        <button class="friend-del-btn" title="Hapus teman" onclick="event.stopPropagation();deleteFriend(${f.id},'${escapeHtml(f.name).replace(/'/g,"\\'")}')"><i class="ti ti-trash"></i></button>`;
       el.appendChild(div);
     });
   }
@@ -925,6 +934,21 @@ async function addFriend() {
 
   closeModal('modal-friend');
   toast('✓ Teman ' + name + ' ditambahkan');
+  await loadAllData();
+}
+
+async function deleteFriend(id, name) {
+  const billCount = state.bills.filter(b => b.people.some(p => p.fid === id)).length;
+  const warn = billCount
+    ? `Hapus ${name}? ${billCount} tagihan yang melibatkan dia akan kehilangan catatan bagiannya (tagihan itu sendiri tidak terhapus).`
+    : `Hapus teman ${name}?`;
+  if (!confirm(warn)) return;
+
+  const { error } = await sb.from('friends').delete().eq('id', id);
+  if (error) { console.error(error); toast('⚠️ Gagal menghapus teman'); return; }
+
+  if (selectedFriend === id) selectedFriend = null;
+  toast('Teman ' + name + ' dihapus');
   await loadAllData();
 }
 
