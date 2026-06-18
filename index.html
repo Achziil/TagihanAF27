@@ -337,6 +337,15 @@
       transition: all 0.12s; flex-shrink: 0;
     }
     .bill-del-btn:hover { background: var(--danger-bg); color: var(--danger-text); border-color: transparent; }
+    .bill-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .bill-edit-btn {
+      background: transparent; border: 1px solid var(--border-light);
+      border-radius: var(--radius-sm); padding: 5px 8px;
+      color: var(--text-muted); cursor: pointer; font-size: 14px;
+      display: flex; align-items: center;
+      transition: all 0.12s; flex-shrink: 0;
+    }
+    .bill-edit-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); border-color: transparent; }
 
     .empty-state { text-align: center; padding: 48px 20px; color: var(--text-muted); }
     .empty-state i { font-size: 36px; display: block; margin-bottom: 10px; }
@@ -356,6 +365,7 @@
       width: 360px; max-width: calc(100vw - 32px);
       box-shadow: var(--shadow-md);
     }
+    .modal.modal-wide { width: 480px; }
     .modal-title { font-size: 15px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
     .modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
     .color-swatches { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
@@ -417,6 +427,11 @@
       .friend-item { flex-direction: column; text-align: center; width: 64px; padding: 6px 4px; }
       .badge-count { position: absolute; top: 4px; right: 4px; }
       .friend-item { position: relative; }
+      .friend-del-btn {
+        display: flex; position: absolute; top: 2px; left: 2px;
+        width: 18px; height: 18px; font-size: 11px;
+        background: var(--bg-primary); border: 1px solid var(--border-light);
+      }
       .summary-grid { grid-template-columns: 1fr 1fr; }
       .summary-grid .sum-card:last-child { grid-column: span 2; }
       .form-grid { grid-template-columns: 1fr; }
@@ -435,8 +450,6 @@
   </div>
   <div class="nav-actions">
     <span class="conn-status" id="conn-status"><span class="conn-dot"></span>Menghubungkan…</span>
-    <button class="nav-btn" onclick="exportData()"><i class="ti ti-download"></i> Export</button>
-    <button class="nav-btn" onclick="openImport()"><i class="ti ti-upload"></i> Import</button>
     <button class="nav-btn primary" onclick="openAddFriend()"><i class="ti ti-user-plus"></i> Teman baru</button>
   </div>
 </nav>
@@ -539,17 +552,38 @@
   </div>
 </div>
 
-<!-- Modal: Import -->
-<div class="modal-bg" id="modal-import">
-  <div class="modal">
-    <div class="modal-title"><i class="ti ti-upload"></i> Import data (JSON)</div>
+<!-- Modal: Edit Bill -->
+<div class="modal-bg" id="modal-edit-bill">
+  <div class="modal modal-wide">
+    <div class="modal-title"><i class="ti ti-pencil"></i> Edit tagihan</div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Keterangan</label>
+        <input type="text" id="e-desc" placeholder="cth: makan siang bareng">
+      </div>
+      <div class="field">
+        <label>Kategori</label>
+        <select id="e-cat">
+          <option value="makan">🍜 Makan</option>
+          <option value="transport">🚗 Transport</option>
+          <option value="hiburan">🎬 Hiburan</option>
+          <option value="utilitas">💡 Utilitas</option>
+          <option value="belanja">🛍️ Belanja</option>
+          <option value="lainnya">📌 Lainnya</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Jumlah (Rp)</label>
+        <input type="number" id="e-amount" placeholder="150000" min="0">
+      </div>
+    </div>
     <div class="field">
-      <label>Tempel data JSON di sini</label>
-      <textarea id="import-text" rows="6" style="width:100%;padding:8px 10px;border:1px solid var(--border-medium);border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text-primary);font-size:12px;font-family:monospace;resize:vertical;outline:none;" placeholder='{"friends":[...],"bills":[...]}'></textarea>
+      <label>Tagihkan ke</label>
+      <div class="friend-chips" id="edit-friend-chips"></div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeModal('modal-import')">Batal</button>
-      <button class="btn btn-primary" onclick="importData()">Import</button>
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-bill')">Batal</button>
+      <button class="btn btn-primary" onclick="saveEditBill()">Simpan perubahan</button>
     </div>
   </div>
 </div>
@@ -598,6 +632,7 @@ let state = { friends: [], bills: [] };
 let selectedFriend = null;
 let activeFilter   = 'all';
 let selectedColor  = 'blue';
+let editingBillId  = null;
 let isLoading      = true;
 let sb             = null;
 
@@ -822,9 +857,14 @@ function renderBills() {
       </div>
       <div class="bill-footer">
         <div class="bill-people">${pillsHtml}</div>
-        <button class="bill-del-btn" title="Hapus tagihan" onclick="deleteBill(${bill.id})">
-          <i class="ti ti-trash"></i>
-        </button>
+        <div class="bill-actions">
+          <button class="bill-edit-btn" title="Edit tagihan" onclick="openEditBill(${bill.id})">
+            <i class="ti ti-pencil"></i>
+          </button>
+          <button class="bill-del-btn" title="Hapus tagihan" onclick="deleteBill(${bill.id})">
+            <i class="ti ti-trash"></i>
+          </button>
+        </div>
       </div>`;
     el.appendChild(card);
   });
@@ -875,6 +915,79 @@ async function deleteBill(id) {
   const { error } = await sb.from('bills').delete().eq('id', id);
   if (error) { console.error(error); toast('⚠️ Gagal menghapus tagihan'); return; }
   toast('Tagihan dihapus');
+  await loadAllData();
+}
+
+// ── Edit tagihan ───────────────────────────────────────────────────
+function openEditBill(billId) {
+  const bill = state.bills.find(b => b.id === billId);
+  if (!bill) return;
+  editingBillId = billId;
+
+  document.getElementById('e-desc').value   = bill.desc;
+  document.getElementById('e-cat').value     = bill.cat;
+  document.getElementById('e-amount').value  = bill.amount;
+
+  renderEditChips(bill.people.map(p => p.fid));
+  document.getElementById('modal-edit-bill').classList.add('open');
+}
+
+function renderEditChips(selectedFids) {
+  const el = document.getElementById('edit-friend-chips');
+  el.innerHTML = '';
+  if (!state.friends.length) {
+    el.innerHTML = `<span style="font-size:13px;color:var(--text-muted)">Tambah teman dulu lewat sidebar</span>`;
+    return;
+  }
+  state.friends.forEach(f => {
+    const cs = COLOR_STYLES[f.color] || COLOR_STYLES.blue;
+    const chip = document.createElement('div');
+    chip.className = 'friend-chip' + (selectedFids.includes(f.id) ? ' selected' : '');
+    chip.id = 'echip-' + f.id;
+    chip.onclick = () => chip.classList.toggle('selected');
+    chip.innerHTML = `<div class="avatar" style="width:20px;height:20px;font-size:9px;background:${cs.bg};color:${cs.color}">${initials(f.name)}</div>${escapeHtml(f.name)}`;
+    el.appendChild(chip);
+  });
+}
+
+async function saveEditBill() {
+  if (editingBillId === null) return;
+  const bill = state.bills.find(b => b.id === editingBillId);
+  if (!bill) return;
+
+  const desc   = document.getElementById('e-desc').value.trim();
+  const cat    = document.getElementById('e-cat').value;
+  const amount = parseFloat(document.getElementById('e-amount').value);
+  const chosen = state.friends.filter(f => document.getElementById('echip-'+f.id)?.classList.contains('selected'));
+
+  if (!desc)                  { toast('⚠️ Isi keterangan tagihan'); return; }
+  if (!amount || amount <= 0) { toast('⚠️ Masukkan jumlah yang valid'); return; }
+  if (!chosen.length)         { toast('⚠️ Pilih minimal satu teman'); return; }
+
+  const { error } = await sb.from('bills')
+    .update({ description: desc, category: cat, amount })
+    .eq('id', editingBillId);
+  if (error) { console.error(error); toast('⚠️ Gagal menyimpan perubahan'); return; }
+
+  const oldFids = bill.people.map(p => p.fid);
+  const newFids = chosen.map(f => f.id);
+  const toRemove = oldFids.filter(id => !newFids.includes(id));
+  const toAdd    = newFids.filter(id => !oldFids.includes(id));
+
+  if (toRemove.length) {
+    const { error: rErr } = await sb.from('bill_shares')
+      .delete().eq('bill_id', editingBillId).in('friend_id', toRemove);
+    if (rErr) { console.error(rErr); toast('⚠️ Gagal memperbarui pembagian tagihan'); return; }
+  }
+  if (toAdd.length) {
+    const shares = toAdd.map(fid => ({ bill_id: editingBillId, friend_id: fid, paid: false }));
+    const { error: aErr } = await sb.from('bill_shares').insert(shares);
+    if (aErr) { console.error(aErr); toast('⚠️ Gagal memperbarui pembagian tagihan'); return; }
+  }
+
+  editingBillId = null;
+  closeModal('modal-edit-bill');
+  toast('✓ Tagihan berhasil diperbarui');
   await loadAllData();
 }
 
@@ -950,69 +1063,6 @@ async function deleteFriend(id, name) {
   if (selectedFriend === id) selectedFriend = null;
   toast('Teman ' + name + ' dihapus');
   await loadAllData();
-}
-
-// ── Export / Import ────────────────────────────────────────────────
-function exportData() {
-  const json = JSON.stringify(state, null, 2);
-  const blob = new Blob([json], {type:'application/json'});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = 'tagihanku-backup.json';
-  a.click(); URL.revokeObjectURL(url);
-  toast('✓ Data diekspor');
-}
-
-function openImport() {
-  document.getElementById('import-text').value = '';
-  document.getElementById('modal-import').classList.add('open');
-}
-
-async function importData() {
-  let parsed;
-  try {
-    parsed = JSON.parse(document.getElementById('import-text').value);
-    if (!parsed.friends || !parsed.bills) throw new Error('Format tidak valid');
-  } catch (e) {
-    toast('⚠️ Format JSON tidak valid');
-    return;
-  }
-
-  try {
-    // Petakan id teman lama -> id teman baru di database (gabung jika nama sudah ada)
-    const idMap = {};
-    for (const f of parsed.friends) {
-      const existing = state.friends.find(sf => sf.name.toLowerCase() === String(f.name).toLowerCase());
-      if (existing) { idMap[f.id] = existing.id; continue; }
-      const { data, error } = await sb.from('friends')
-        .insert({ name: f.name, color: f.color || 'blue' }).select().single();
-      if (error) throw error;
-      idMap[f.id] = data.id;
-    }
-
-    for (const b of parsed.bills) {
-      const { data: bill, error } = await sb.from('bills').insert({
-        description: b.desc, category: b.cat || 'lainnya',
-        amount: b.amount, bill_date: b.date || today()
-      }).select().single();
-      if (error) throw error;
-
-      const shares = (b.people || [])
-        .filter(p => idMap[p.fid] !== undefined)
-        .map(p => ({ bill_id: bill.id, friend_id: idMap[p.fid], paid: !!p.paid }));
-      if (shares.length) {
-        const { error: sErr } = await sb.from('bill_shares').insert(shares);
-        if (sErr) throw sErr;
-      }
-    }
-
-    closeModal('modal-import');
-    toast('✓ Data berhasil diimpor');
-    await loadAllData();
-  } catch (e) {
-    console.error(e);
-    toast('⚠️ Gagal mengimpor data ke database');
-  }
 }
 
 // ── Modal helpers ──────────────────────────────────────────────────
